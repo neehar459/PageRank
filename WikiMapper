@@ -1,0 +1,93 @@
+package PageRank;
+
+
+
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.Mapper;
+import org.apache.hadoop.mapred.OutputCollector;
+import org.apache.hadoop.mapred.Reporter;
+
+public class WikiMapper extends MapReduceBase implements
+		Mapper<LongWritable, Text, Text, Text> {
+
+	// private static final Pattern pattern = Pattern.compile("\\[.+?\\]");
+	public static final char DELIM = '\t';
+	private static final Pattern TITLE_PATTERN = Pattern.compile(
+			"<title>(.*?)</title>", Pattern.DOTALL);
+	private static final Pattern TEXT_PATTERN = Pattern.compile("<text(.*?)</text>",
+			Pattern.DOTALL);
+	private static final Pattern LINK_PATTERN = Pattern.compile("\\[\\[(.*?)\\]\\]",
+			Pattern.DOTALL);
+
+	public void map(LongWritable key, Text value,
+			OutputCollector<Text, Text> output, Reporter reporter)
+			throws IOException {
+
+		String fullPage = value.toString();
+
+		String pagename;
+		Matcher matcher = TITLE_PATTERN.matcher(fullPage);
+		if (matcher.find()) {
+			pagename = matcher.group().replaceAll("</?title>", "").trim();
+			pagename = pagename.replace(' ', '_');
+		} else {
+			System.out.println("No title present in the document");
+			return;
+		}
+		Set<String> duplicate = new HashSet<String>();
+		//write page and #
+		output.collect(new Text(pagename), new Text("#"));
+		//
+		matcher = TEXT_PATTERN.matcher(fullPage);
+		if (matcher.find())
+		{
+			String text=matcher.group().trim();
+			matcher = LINK_PATTERN.matcher(text);
+			while (matcher.find()) {
+				String link = matcher.group().replaceAll("[\\[\\]]", "").trim();
+				if (isNotWikiLink(link))
+					continue;
+				int pipeSymbol = link.indexOf("|");
+				if (pipeSymbol > -1)
+					link = link.substring(0, pipeSymbol);
+				link = link.replaceAll("\\s", "_");
+				//link = link.replaceAll(",", "");
+				if (!pagename.equals(link) && duplicate.add(link)) {
+					output.collect(new Text(link), new Text(pagename));
+				}
+			}
+	
+			if (duplicate.size() == 0)
+				output.collect(new Text(""), new Text(pagename));
+		}
+	}
+
+	private boolean isNotWikiLink(String link) {
+		if (link == null || link.isEmpty())
+			return true;
+//		int start = 0;
+//		if (link.startsWith("[[")) {
+//			start = 2;
+//		}
+//		char first = link.charAt(start);
+//
+//		if (first == '#' || first == ',' || first == '.' || first == '{'
+//				|| first == '&' || first == '\'' || first == '-')
+//			return true;
+//
+//		if (link.contains(",") || link.contains(":") || link.contains("#")
+//				|| link.contains("&"))
+//			return true;
+
+		return false;
+	}
+
+}
